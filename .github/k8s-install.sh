@@ -39,10 +39,24 @@ echo -e "\n##### create keycloak namespace #####\n"
 kubectl create namespace "${NAMESPACE}"
 
 echo -e "\n##### install keycloak #####\n"
-helm upgrade -i keycloak codecentric/keycloak --wait --namespace "${NAMESPACE}" --version "${KEYCLOAK_CHART_VERSION}"
+kubectl create secret generic keycloak-auth \
+    --namespace "${NAMESPACE}" \
+    --from-literal=username=keycloak \
+    --from-literal=password=keycloak
+
+helm upgrade -i keycloak codecentric/keycloak \
+    --wait \
+    --namespace "${NAMESPACE}" \
+    --version "${KEYCLOAK_CHART_VERSION}" \
+    --values .github/keycloak-values.yaml
 
 echo -e "\n##### install keycloak-controller #####\n"
-helm upgrade -i keycloak-controller kiwigrid/keycloak-controller --wait --namespace "${NAMESPACE}" --version "${KEYCLOAK_CONTROLLER_CHART_VERSION}" --set image.repository=keycloak-controller --set image.tag=ci-snapshot
+helm upgrade -i keycloak-controller kiwigrid/keycloak-controller \
+    --wait \
+    --namespace "${NAMESPACE}" \
+    --version "${KEYCLOAK_CONTROLLER_CHART_VERSION}" \
+    --set image.repository=keycloak-controller \
+    --set image.tag=ci-snapshot
 
 echo -e "\n##### install keycloak-controller crds #####\n"
 while IFS= read -r CRD; do
@@ -61,17 +75,17 @@ while IFS= read -r KEYCLOAK_EXAMPLE; do
 done < <(find examples -type f)
 
 echo -e "\n##### show keycloak-controller examples #####\n"
+kubectl -n "${NAMESPACE}" get keycloaks.k8s.kiwigrid.com
+echo ""
+kubectl -n "${NAMESPACE}" get keycloakrealms.k8s.kiwigrid.com
+echo ""
 kubectl -n "${NAMESPACE}" get keycloakclients.k8s.kiwigrid.com
 echo ""
 kubectl -n "${NAMESPACE}" get keycloakclientscopes.k8s.kiwigrid.com
 echo ""
-kubectl -n "${NAMESPACE}" get keycloakrealms.k8s.kiwigrid.com
-echo ""
-kubectl -n "${NAMESPACE}" get keycloaks.k8s.kiwigrid.com
-echo ""
 
 echo -e "\n##### check for errors in keycloak-controller logs #####\n"
-sleep 150
+sleep 20
 if kubectl -n "${NAMESPACE}" logs -l app.kubernetes.io/name=keycloak-controller | grep -q ERROR; then
     echo "errors found in logs :("
     kubectl -n "${NAMESPACE}" logs -l app.kubernetes.io/name=keycloak-controller
